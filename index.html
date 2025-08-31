@@ -7,8 +7,13 @@
   <link rel="stylesheet" href="style.css">
   <!-- TensorFlow.js -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.20.0/dist/tfjs-backend-wasm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
+  <script>
+    if (tf?.wasm?.setWasmPaths) {
+      tf.wasm.setWasmPaths("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.20.0/dist/");
+    }
+  </script>
 </head>
 <body>
   <h1>🧠 U-Net Image Segmentation</h1>
@@ -17,6 +22,18 @@
 
   <section>
     <h2>1. Upload Training Data</h2>
+    <!-- Folder Selection and Copying -->
+    <div>
+      <label for="sourceFolderInput"><b>Select Source Folder:</b></label>
+      <input type="file" id="sourceFolderInput" webkitdirectory directory>
+      <p id="sourceFolderPath">No folder selected</p>
+
+      <label for="numImagesInput"><b>Number of Image-Mask Pairs to Copy:</b></label>
+      <input type="number" id="numImagesInput" min="1" placeholder="Enter number of pairs">
+
+      <button id="copyFilesBtn">Copy Image-Mask Pairs</button>
+    </div>
+
     <div class="drop-container">
       <div id="imageDrop" class="drop-zone">
         <span>Drop RGB images here or click to select</span>
@@ -40,11 +57,32 @@
       <option value="shallow">Shallow U-Net (fast, simple)</option>
       <option value="deep">Deep U-Net (BatchNorm, more layers)</option>
     </select>
+
+    <label class="inline">
+      Epochs
+      <input type="number" id="epochsInput" value="10" min="1" step="1">
+    </label>
+    <label class="inline">
+      Batch size
+      <input type="number" id="batchSizeInput" value="4" min="1" step="1">
+    </label>
+
     <button id="trainBtn">Train U-Net</button>
     <progress id="trainBar" value="0" max="10"></progress>
+    <span id="trainSpinner" aria-hidden="true"></span>
+
     <span id="trainProgress"></span>
     <div id="trainStatus"></div>
     <canvas id="trainingChart" width="400" height="200"></canvas>
+
+    <!-- Legend for clarity (matches dataset colors in app.js) -->
+    <div class="chart-legend" aria-label="Training chart legend">
+      <span class="legend-item"><span class="legend-dot loss"></span> Loss</span>
+      <span class="legend-item"><span class="legend-dot dice"></span> Dice</span>
+      <span class="legend-item"><span class="legend-dot val-loss"></span> Val Loss</span>
+      <span class="legend-item"><span class="legend-dot val-dice"></span> Val Dice</span>
+    </div>
+
     <div class="model-actions">
       <button id="downloadModelBtn">Download Model</button>
       <input type="file" id="uploadModelInput" accept=".json,.bin" multiple style="display:none">
@@ -64,14 +102,38 @@
           <div id="predictCount">No image uploaded</div>
           <div id="predictPreview" class="preview-list"></div>
         </div>
+
         <div>
-          <label for="thresholdSlider">Threshold: <span id="thresholdValue">0.5</span></label>
-          <input type="range" id="thresholdSlider" min="0" max="1" step="0.01" value="0.5" style="width:150px;">
+          <label class="thresholdSlider">Threshold</label>
+          <!-- id from thresholdSlider -> thresholdInput -->
+          <input type="number" id="thresholdInput" min="0" max="1" step="0.01" value="0.5" style="width:150px;">
         </div>
+
         <button id="predictBtn">Predict Mask</button>
-        <canvas id="resultCanvas" width="256" height="256" style="border:1px solid #ccc; margin-top:10px;"></canvas>
+        <!-- White background so it’s visible before drawing -->
+        <canvas id="resultCanvas" width="256" height="256"
+                style="border:1px solid #ccc; margin-top:10px; background:#fff;"></canvas>
       </div>
-      <!-- Predict on Mask -->
+
+      <!-- RIGHT: Prediction Accuracy panel -->
+      <div class="predict-right">
+        <div id="gtDrop" class="drop-zone">
+          <input id="gtMaskInput" type="file" accept=".png,.jpg,.jpeg,.bmp,.webp" hidden />
+          <strong>Upload a mask to compute Accuracy</strong>
+          <div id="gtStatus" class="muted">Click to select or drop a file</div>
+        </div>
+
+        <div style="margin:10px 0; display:flex; gap:8px; align-items:center;">
+          <button id="scoreBtn" class="btn">Prediction Accuracy</button>
+          <span id="scoreText" class="muted"></span>
+        </div>
+
+        <!-- White background for GT preview too -->
+        <canvas id="gtCanvas" class="canvas-box" width="512" height="512"
+                style="background:#fff;"></canvas>
+      </div>
+
+      <!-- Predict on Mask  -->
       <div>
         <div id="maskPredictDrop" class="drop-zone" style="width:220px;">
           <span>Click to select mask image</span>
@@ -80,11 +142,82 @@
           <div id="maskPredictPreview" class="preview-list"></div>
         </div>
         <button id="showMaskBtn">Show Mask</button>
-        <canvas id="maskResultCanvas" width="256" height="256" style="border:1px solid #ccc; margin-top:20px;"></canvas>
+        <canvas id="maskResultCanvas" width="256" height="256"
+                style="border:1px solid #ccc; margin-top:20px; background:#fff;"></canvas>
       </div>
     </div>
+
+    <section id="videoSection">
+      <h3>Video Segmentation</h3>
+
+      <div class="row">
+        <label class="inline">
+          Video file
+          <input type="file" id="videoFile" accept="video/*">
+        </label>
+
+        <label class="inline">
+          Mode
+          <select id="videoMode">
+            <option value="overlay">Overlay (red mask)</option>
+            <option value="mask">Mask only (BW)</option>
+          </select>
+        </label>
+
+        <label class="inline">
+          Target FPS
+          <input type="number" id="videoFps" value="15" min="1" max="60" step="1">
+        </label>
+
+        <label class="inline">
+          Frame stride
+          <input type="number" id="frameStride" value="1" min="1" step="1">
+        </label>
+
+        <button id="startVideoBtn" class="primary">Segment Video</button>
+        <button id="stopVideoBtn">Stop</button>
+      </div>
+
+      <div class="row">
+        <progress id="videoProgress" max="100" value="0" style="width:240px;"></progress>
+        <span id="videoStatus"></span>
+      </div>
+
+      <div class="row">
+        <video id="inputVideo" controls style="max-width:100%; display:none;"></video>
+      </div>
+
+      <div class="row">
+        <canvas id="videoCanvas" width="640" height="360"
+                style="max-width:100%; border:1px solid #ddd; background:#fff;"></canvas>
+      </div>
+
+      <div class="row">
+        <a id="videoDownload" href="#" download="segmented.webm" style="display:none;">Download result</a>
+      </div>
+    </section>
   </section>
 
-  <script src="app.js"></script>
+  <!-- Local, offline libs  -->
+  <script src="libs/tf.min.js" defer></script>
+  <script src="libs/tfjs-backend-wasm.min.js" defer></script>
+  <script>
+    // Point TFJS to the local wasm files
+    if (window.tf?.wasm?.setWasmPaths) {
+      tf.wasm.setWasmPaths("libs/");
+    }
+  </script>
+  <script src="libs/chart.umd.min.js" defer></script>
+
+  <script src="app.js" defer></script>
+
+  <!-- Training overlay -->
+  <div id="trainerOverlay" role="alert" aria-live="polite" style="display:none;position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;background:rgba(255,255,255,.75);backdrop-filter:blur(2px);">
+    <div class="trainerBox" style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px 20px;border-radius:14px;background:#fff;box-shadow:0 8px 32px rgba(0,0,0,.15);">
+      <div class="spinner" style="width:56px;height:56px;border:6px solid #d9e3f0;border-top-color:#1976d2;border-radius:50%;animation:spin .9s linear infinite"></div>
+      <div class="msg" style="font:600 15px system-ui,Segoe UI,Roboto,Arial;color:#1976d2">Preparing training…</div>
+    </div>
+  </div>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
 </body>
 </html>

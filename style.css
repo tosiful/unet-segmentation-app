@@ -163,3 +163,186 @@ input[type="range"] {
     gap: 24px;
   }
 }
+
+.chart-legend {
+  margin-top: 8px;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 0.95em;
+  color: #333;
+}
+.chart-legend .legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 1px solid rgba(0,0,0,0.15);
+}
+
+/* Match Chart.js dataset colors in app.js */
+.legend-dot.loss { background: #ff0000; }      /* red */
+.legend-dot.acc { background: #008000; }       /* green */
+.legend-dot.val-loss { background: #ffa500; }  /* orange */
+.legend-dot.val-acc { background: #0000ff; }   /* blue */
+.chart-legend {
+  margin-top: 8px;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 0.95em;
+  color: #333;
+}
+.chart-legend .legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 1px solid rgba(0,0,0,0.15);
+}
+/* Match Chart.js dataset colors in app.js */
+.legend-dot.loss     { background: #ff0000; } /* red */
+.legend-dot.acc      { background: #008000; } /* green */
+.legend-dot.val-loss { background: #ffa500; } /* orange */
+.legend-dot.val-acc  { background: #0000ff; } /* blue */
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 12px;
+}
+.inline input[type="number"] {
+  width: 72px;
+  padding: 4px 6px;
+}
+.legend-dot.loss      { background: #ff0000; } /* red */
+.legend-dot.dice      { background: #008000; } /* green */
+.legend-dot.val-loss  { background: #ffa500; } /* orange */
+.legend-dot.val-dice  { background: #0000ff; } /* blue */
+
+#videoSection h3 { margin-top: 16px; }
+.row { margin: 8px 0; }
+.inline { display: inline-flex; align-items: center; gap: 8px; margin-right: 12px; }
+.inline input[type="number"] { width: 80px; padding: 4px 6px; }
+
+/* ===== Training overlay ===== */
+#trainerOverlay {
+  position: fixed;
+  inset: 0;
+  display: none;           /* shown via JS */
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.75);
+  backdrop-filter: blur(2px);
+  z-index: 9999;
+}
+#trainerOverlay .trainerBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+}
+#trainerOverlay .spinner {
+  width: 56px;
+  height: 56px;
+  border: 6px solid #d9e3f0;
+  border-top-color: #1976d2;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+#trainerOverlay .msg {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-weight: 600;
+  color: #1976d2;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* loading state for the Train button */
+#trainBtn.loading {
+  position: relative;
+  pointer-events: none;
+  opacity: .85;
+}
+
+/* Spinner shown to the right of the training progress bar */
+#trainSpinner {
+  display: none;                /* JS will toggle this */
+  width: 18px;
+  height: 18px;
+  margin-left: 10px;            /* space from the progress bar */
+  border: 3px solid #cfe3ff;    /* light ring */
+  border-top-color: #1976d2;    /* blue segment */
+  border-radius: 50%;
+  vertical-align: middle;
+  animation: trainbar-spin .8s linear infinite;
+}
+#trainSpinner.show { display: inline-block; }
+
+@keyframes trainbar-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Hide the optional ground-truth mask uploader in Predict */
+#maskPredictDrop,
+#showMaskBtn,
+#maskResultCanvas,
+#maskPredictCount,
+#maskPredictPreview { display: none !important; }
+
+/* Kill the spinner inside the Train U-Net button */
+#trainBtn.loading::before { content: none !important; display: none !important; }
+/* (optional) keep the dim/disabled style if you like */
+
+
+
+/* Right column container (GT + scores) */
+.predict-right {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 220px;
+  max-width: 280px;
+}
+
+/* Make both preview canvases white initially */
+#resultCanvas,
+#gtCanvas {
+  background: #fff;               /* ensures white instead of black */
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+#gtCanvas { margin-top: 8px; }
+
+/* Numeric threshold input box */
+#thresholdInput {
+  width: 100px;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.95em;
+}
+
+/* Subtle helper/result text */
+.muted {
+  color: #667085;
+  font-size: 0.95em;
+}
