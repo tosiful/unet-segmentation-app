@@ -1,3 +1,4 @@
+/* ===== Base ===== */
 body {
   font-family: 'Segoe UI', Arial, sans-serif;
   background: #f7f7f7;
@@ -17,12 +18,26 @@ h1 {
 section {
   background: #fff;
   margin: 30px auto 0 auto;
-  padding: 24px 32px 24px 32px;
+  padding: 24px 32px;
   border-radius: 12px;
   box-shadow: 0 2px 12px rgba(0,0,0,0.07);
   max-width: 650px;
 }
 
+.row { margin: 8px 0; }
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 12px;
+}
+.inline input[type="number"] {
+  width: 80px;
+  padding: 4px 6px;
+}
+
+/* ===== Drop zones ===== */
 .drop-container {
   display: flex;
   gap: 20px;
@@ -40,20 +55,19 @@ section {
   transition: border-color 0.2s, background 0.2s;
   position: relative;
 }
-
+.drop-zone:hover {
+  border-color: #8ab4ff;
+  background: #f3f7ff;
+}
 .drop-zone.dragging {
   border-color: #007bff;
   background: #e6f0ff;
 }
-
 .drop-zone.loaded {
   border-color: #28a745;
   background: #eafbe7;
 }
-
-.drop-zone input[type="file"] {
-  display: none;
-}
+.drop-zone input[type="file"] { display: none; }
 
 #imageCount, #maskCount, #predictCount, #maskPredictCount {
   margin-top: 10px;
@@ -61,6 +75,23 @@ section {
   color: #555;
 }
 
+.preview-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+  justify-content: center;
+}
+.preview-list img {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  background: #eee;
+}
+
+/* ===== Buttons ===== */
 button {
   background: #007bff;
   color: #fff;
@@ -70,17 +101,26 @@ button {
   font-size: 1em;
   margin: 8px 4px 8px 0;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.2s, box-shadow .2s;
 }
+button:hover { background: #0056b3; }
+button:disabled { opacity: .6; cursor: not-allowed; }
 
-button:hover {
-  background: #0056b3;
+.primary { background: #0d6efd; }
+.primary:hover { background: #0b5ed7; }
+
+.secondary {
+  background: #e9ecef;
+  color: #111;
 }
+.secondary:hover { background: #dde2e6; }
 
-.model-actions {
-  margin-top: 12px;
-}
+.btn { background: #6c757d; }
+.btn:hover { background: #5c636a; }
 
+.model-actions { margin-top: 12px; }
+
+/* ===== Progress & statuses ===== */
 progress {
   width: 180px;
   height: 18px;
@@ -94,39 +134,22 @@ progress {
   font-size: 1em;
 }
 
-canvas#trainingChart {
-  margin-top: 18px;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-}
-
-#resultCanvas, #maskResultCanvas {
-  display: block;
-  margin-top: 10px;
-}
-
-input[type="range"] {
+/* Spinner beside progress bar */
+#trainSpinner {
+  display: none;
+  width: 18px;
+  height: 18px;
+  margin-left: 10px;
+  border: 3px solid #cfe3ff;
+  border-top-color: #1976d2;
+  border-radius: 50%;
   vertical-align: middle;
+  animation: trainbar-spin .8s linear infinite;
 }
+#trainSpinner.show { display: inline-block; }
+@keyframes trainbar-spin { to { transform: rotate(360deg); } }
 
-.preview-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 8px;
-  justify-content: center;
-}
-
-.preview-list img {
-  width: 36px;
-  height: 36px;
-  object-fit: cover;
-  border-radius: 4px;
-  border: 1px solid #ddd;
-  background: #eee;
-}
-
+/* ===== Toast ===== */
 #toast {
   position: fixed;
   top: 24px;
@@ -145,23 +168,15 @@ input[type="range"] {
   text-align: center;
   pointer-events: none;
 }
-
 #toast.success { background: #28a745; }
-#toast.error { background: #dc3545; }
+#toast.error   { background: #dc3545; }
 
-@media (max-width: 900px) {
-  section {
-    padding: 16px 4vw;
-    max-width: 98vw;
-  }
-  .drop-container {
-    flex-direction: column;
-    gap: 12px;
-  }
-  section > div[style*="display: flex"] {
-    flex-direction: column;
-    gap: 24px;
-  }
+/* ===== Chart & legend ===== */
+canvas#trainingChart {
+  margin-top: 18px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
 }
 
 .chart-legend {
@@ -185,64 +200,102 @@ input[type="range"] {
   display: inline-block;
   border: 1px solid rgba(0,0,0,0.15);
 }
+/* Match Chart.js dataset colors */
+.legend-dot.loss      { background: #e53935; } /* red */
+.legend-dot.dice      { background: #43a047; } /* green */
+.legend-dot.val-loss  { background: #fb8c00; } /* orange */
+.legend-dot.val-dice  { background: #1e88e5; } /* blue */
 
-/* Match Chart.js dataset colors in app.js */
-.legend-dot.loss { background: #ff0000; }      /* red */
-.legend-dot.acc { background: #008000; }       /* green */
-.legend-dot.val-loss { background: #ffa500; }  /* orange */
-.legend-dot.val-acc { background: #0000ff; }   /* blue */
-.chart-legend {
-  margin-top: 8px;
+/* ===== Timing & benchmark tables ===== */
+#timingTable,
+#benchTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  font-size: .95em;
+}
+#timingTable td,
+#benchTable th,
+#benchTable td {
+  border: 1px solid #eee;
+  padding: 6px 8px;
+}
+#benchTable thead th {
+  background: #f5f7fb;
+  font-weight: 600;
+  color: #334155;
+}
+#benchTable tbody tr:nth-child(odd) td { background: #fafbff; }
+
+/* --- Condensed table mode for screenshots/reports --- */
+table.condensed td,
+table.condensed th {
+  padding: 3px 5px;
+  font-size: 0.85em;
+}
+table.condensed {
+  border-collapse: collapse;
+  border: 1px solid #ddd;
+}
+table.condensed th {
+  background: #f2f4f8;
+  font-weight: 600;
+}
+table.condensed td:first-child {
+  font-weight: 500;
+  color: #222;
+}
+
+/* ===== Predict area ===== */
+#resultCanvas, #maskResultCanvas {
+  display: block;
+  margin-top: 10px;
+}
+#resultCanvas,
+#gtCanvas {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+#gtCanvas { margin-top: 8px; }
+
+/* Hide optional mask widgets */
+#maskPredictDrop,
+#showMaskBtn,
+#maskResultCanvas,
+#maskPredictCount,
+#maskPredictPreview {
+  display: none !important;
+}
+
+/* Right column container (GT + scores) */
+.predict-right {
   display: flex;
-  gap: 16px;
-  align-items: center;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 220px;
+  max-width: 280px;
+}
+
+/* Threshold input */
+#thresholdInput {
+  width: 100px;
+  padding: 6px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
   font-size: 0.95em;
-  color: #333;
 }
-.chart-legend .legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  display: inline-block;
-  border: 1px solid rgba(0,0,0,0.15);
-}
-/* Match Chart.js dataset colors in app.js */
-.legend-dot.loss     { background: #ff0000; } /* red */
-.legend-dot.acc      { background: #008000; } /* green */
-.legend-dot.val-loss { background: #ffa500; } /* orange */
-.legend-dot.val-acc  { background: #0000ff; } /* blue */
 
-.inline {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-right: 12px;
-}
-.inline input[type="number"] {
-  width: 72px;
-  padding: 4px 6px;
-}
-.legend-dot.loss      { background: #ff0000; } /* red */
-.legend-dot.dice      { background: #008000; } /* green */
-.legend-dot.val-loss  { background: #ffa500; } /* orange */
-.legend-dot.val-dice  { background: #0000ff; } /* blue */
-
-#videoSection h3 { margin-top: 16px; }
-.row { margin: 8px 0; }
-.inline { display: inline-flex; align-items: center; gap: 8px; margin-right: 12px; }
-.inline input[type="number"] { width: 80px; padding: 4px 6px; }
+/* Subtle helper/result text */
+.muted { color: #667085; font-size: 0.95em; }
 
 /* ===== Training overlay ===== */
 #trainerOverlay {
   position: fixed;
   inset: 0;
-  display: none;           /* shown via JS */
+  display: none;
   align-items: center;
   justify-content: center;
   background: rgba(255,255,255,0.75);
@@ -274,75 +327,29 @@ input[type="range"] {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* loading state for the Train button */
+/* Train button loading state */
 #trainBtn.loading {
   position: relative;
   pointer-events: none;
   opacity: .85;
 }
-
-/* Spinner shown to the right of the training progress bar */
-#trainSpinner {
-  display: none;                /* JS will toggle this */
-  width: 18px;
-  height: 18px;
-  margin-left: 10px;            /* space from the progress bar */
-  border: 3px solid #cfe3ff;    /* light ring */
-  border-top-color: #1976d2;    /* blue segment */
-  border-radius: 50%;
-  vertical-align: middle;
-  animation: trainbar-spin .8s linear infinite;
-}
-#trainSpinner.show { display: inline-block; }
-
-@keyframes trainbar-spin {
-  to { transform: rotate(360deg); }
+#trainBtn.loading::before {
+  content: none !important;
+  display: none !important;
 }
 
-/* Hide the optional ground-truth mask uploader in Predict */
-#maskPredictDrop,
-#showMaskBtn,
-#maskResultCanvas,
-#maskPredictCount,
-#maskPredictPreview { display: none !important; }
-
-/* Kill the spinner inside the Train U-Net button */
-#trainBtn.loading::before { content: none !important; display: none !important; }
-/* (optional) keep the dim/disabled style if you like */
-
-
-
-/* Right column container (GT + scores) */
-.predict-right {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 220px;
-  max-width: 280px;
-}
-
-/* Make both preview canvases white initially */
-#resultCanvas,
-#gtCanvas {
-  background: #fff;               /* ensures white instead of black */
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-}
-#gtCanvas { margin-top: 8px; }
-
-/* Numeric threshold input box */
-#thresholdInput {
-  width: 100px;
-  padding: 6px 8px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  background: #fff;
-  font-size: 0.95em;
-}
-
-/* Subtle helper/result text */
-.muted {
-  color: #667085;
-  font-size: 0.95em;
+/* ===== Responsive ===== */
+@media (max-width: 900px) {
+  section {
+    padding: 16px 4vw;
+    max-width: 98vw;
+  }
+  .drop-container {
+    flex-direction: column;
+    gap: 12px;
+  }
+  section > div[style*="display: flex"] {
+    flex-direction: column;
+    gap: 24px;
+  }
 }

@@ -104,6 +104,103 @@ function hideTrainOverlay() {
   if (el) el.style.display = "none";
 }
 
+
+/* ===== Benchmark & timing helpers (time + memory + UI cells) ===== */
+function now(){ return performance.now(); }
+function secs(t0){ return (now() - t0) / 1000; }
+function fmtMs(ms){ return `${ms.toFixed(1)} ms`; }
+function fmtMin(ms){ return `${(ms/60000).toFixed(2)} min`; }
+function setCell(id, text){ const el = document.getElementById(id); if (el) el.textContent = text; }
+
+function snapMemory(tag){
+  const m = tf.memory();
+  console.log(`[MEM] ${tag}`, m);
+  return { tag, numTensors: m.numTensors, numBytes: m.numBytes };
+}
+
+/* ---- Backend selector (from UI) ---- */
+async function setBackendFromUI(){
+  const sel = document.getElementById("backendSelect");
+  const wanted = sel ? sel.value : "webgl";
+  try {
+    const t0 = now();
+    await tf.setBackend(wanted);
+    await tf.ready();
+    const took = now() - t0;
+    console.log("TFJS backend:", tf.getBackend(), `(${fmtMs(took)})`);
+    setCell("t_backend", fmtMs(took));
+    const bstatus = document.getElementById("backendStatus");
+    if (bstatus) bstatus.textContent = `Backend: ${tf.getBackend()}`;
+  } catch(e){
+    console.warn("Failed to set backend:", wanted, e);
+    const bstatus = document.getElementById("backendStatus");
+    if (bstatus) bstatus.textContent = `Backend: failed → ${e.message}`;
+  }
+}
+// Backward-compat alias for your existing load() wiring:
+async function setBackendFromSelect(){ return setBackendFromUI(); }
+
+/* ---- Dataset limit preset ---- */
+function datasetLimitFromUI(total){
+  const p = document.getElementById("datasetPreset");
+  const v = p ? p.value : "auto";
+  if (v === "auto") return total;
+  const limit = parseInt(v, 10);
+  return Math.min(isFinite(limit) ? limit : total, total);
+}
+
+/* store benchmark export as CSV */
+const benchRows = [];
+function appendBenchRow(row){
+  benchRows.push(row);
+  const tb = document.querySelector("#benchTable tbody");
+  if (!tb) return;
+  const tr = document.createElement("tr");
+  Object.values(row).forEach((val) => {
+    const td = document.createElement("td");
+    td.style.border = "1px solid #ddd"; td.style.padding = "3px 6px";
+    td.textContent = (typeof val === "number") ? (Number.isFinite(val) ? val.toFixed(3) : `${val}`) : `${val}`;
+    tr.appendChild(td);
+  });
+  tb.appendChild(tr);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("exportCsvBtn");
+  if (!btn) return;
+
+  btn.addEventListener("click", () => {
+    // Export only the Timing & Backend table
+    const timingTable = document.querySelector("#timingTable");
+    if (!timingTable) return;
+
+    const rows = [];
+    const trs = timingTable.querySelectorAll("tr");
+
+    trs.forEach(tr => {
+      const cells = Array.from(tr.querySelectorAll("td"));
+      if (cells.length === 2) {
+        const label = cells[0].innerText.trim().replace(/\s+/g, " ");
+        const value = cells[1].innerText.trim().replace(/\s+/g, " ");
+        rows.push([label, value].join(","));
+      }
+    });
+
+    // Add header
+    rows.unshift("Metric,Value");
+
+    const csv = rows.join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "timing_backend.csv";
+    a.click();
+  });
+});
+
+
+
+
 function updateCount(isMask) {
   const el = document.getElementById(isMask ? "maskCount" : "imageCount");
   if (!el) return;
@@ -381,7 +478,8 @@ function open2D(bin, k = 3)  { return dilate2D(erode2D(bin, k), k); }
 function close2D(bin, k = 3) { return erode2D(dilate2D(bin, k), k); }
 
 /* --------------------------- Chart (safe guard) --------------------------- */
-const history = { labels: [], loss: [], dice: [], val_loss: [], val_dice: [] };
+// NOTE: keep the single history object (removed duplicate const history)
+let history = { labels: [], loss: [], dice: [], val_loss: [], val_dice: [] };
 let chart;
 
 function updateChart() {
@@ -410,7 +508,7 @@ function updateChart() {
   else { chart.data = data; chart.options = options; chart.update(); }
 }
 
-/* ------------------------------ Train ------------------------------ */
+/* ------------------------------ Train (INSTRUMENTED) ------------------------------ */
 (function bindTrain() {
   const btn = document.getElementById("trainBtn");
   if (!btn) return;
@@ -418,6 +516,20 @@ function updateChart() {
   btn.addEventListener("click", async () => {
     showTrainSpinner();
     setTrainingUI(true, "Preparing data…");
+
+    // Reset timing UI cells for this run
+    setCell("t_backend", "—");
+    setCell("t_pre", "—");
+    setCell("t_stack", "—");
+    setCell("t_compile", "—");
+    setCell("t_epochs", "—");
+    setCell("t_total", "—");
+    setCell("t_mem", "—");
+
+    // timing accumulators
+    const tGlobal0 = now();
+    let tBackendSet = 0, tPre = 0, tStack = 0, tCompile = 0;
+    const epochTimes = [];
 
     try {
       if (rgbFiles.length === 0 || maskFiles.length === 0) {
@@ -429,35 +541,60 @@ function updateChart() {
         return;
       }
 
+      // ===== BACKEND SET =====
+      const tB0 = now();
+      await setBackendFromUI();
+      tBackendSet = now() - tB0;
+      // setCell("t_backend") already set inside setBackendFromUI
+
+      // ===== LOAD & PREPROCESS =====
       setTrainingUI(true, `Loading ${Math.min(rgbFiles.length, maskFiles.length)} pairs…`);
 
+      const limit = datasetLimitFromUI(Math.min(rgbFiles.length, maskFiles.length));
+      const useRgb  = rgbFiles.slice(0, limit);
+      const useMask = maskFiles.slice(0, limit);
+
       const inputImages = [], inputMasks = [];
-      for (let i = 0; i < rgbFiles.length; i++) {
-        const rgbT = await preprocessImageFile(rgbFiles[i]);
-        const mskT = await preprocessMaskFile(maskFiles[i]);
+      const tPre0 = now();
+      for (let i = 0; i < useRgb.length; i++) {
+        const rgbT = await preprocessImageFile(useRgb[i]);
+        const mskT = await preprocessMaskFile(useMask[i]);
         inputImages.push(rgbT); inputMasks.push(mskT);
       }
+      tPre = now() - tPre0;
+      setCell("t_pre", fmtMs(tPre));
+      console.log("⏱ Preprocess:", fmtMs(tPre));
 
+      // ===== BUILD + COMPILE =====
       setTrainingUI(true, "Compiling model…");
-
-      const modelType = (document.getElementById("modelSelect") && document.getElementById("modelSelect").value) || "shallow";
+      const tComp0 = now();
+      const modelType = (document.getElementById("modelSelect")?.value) || "shallow";
       model = modelType === "deep" ? buildDeepUNetModel() : buildShallowUNetModel();
       model.compile({ optimizer: tf.train.adam(), loss: diceLoss, metrics: [diceCoef] });
+      tCompile = now() - tComp0;
+      setCell("t_compile", fmtMs(tCompile));
+      console.log("⏱ Build+Compile:", fmtMs(tCompile));
 
+      // ===== STACK =====
+      const tStack0 = now();
       const x = tf.stack(inputImages);  // [N,256,256,3]
       const y = tf.stack(inputMasks);   // [N,256,256,1]
+      tStack = now() - tStack0;
+      setCell("t_stack", fmtMs(tStack));
+      console.log("⏱ Stack:", fmtMs(tStack));
 
-      let epochs = parseInt((document.getElementById("epochsInput") && document.getElementById("epochsInput").value), 10);
+      // ===== FIT =====
+      let epochs = parseInt((document.getElementById("epochsInput")?.value), 10);
       if (!Number.isFinite(epochs) || epochs < 1) epochs = 10;
 
-      let batchSize = parseInt((document.getElementById("batchSizeInput") && document.getElementById("batchSizeInput").value), 10);
+      let batchSize = parseInt((document.getElementById("batchSizeInput")?.value), 10);
       if (!Number.isFinite(batchSize) || batchSize < 1)
-        batchSize = Math.min(4, Math.max(1, Math.floor(rgbFiles.length / 4)));
-      if (batchSize > rgbFiles.length) batchSize = rgbFiles.length;
+        batchSize = Math.min(4, Math.max(1, Math.floor(useRgb.length / 4)));
+      if (batchSize > useRgb.length) batchSize = useRgb.length;
 
       let validationSplit = 0.2;
-      if (Math.floor(rgbFiles.length * validationSplit) < 1 && rgbFiles.length > 1)
-        validationSplit = 1 / rgbFiles.length;
+      if (Math.floor(useRgb.length * validationSplit) < 1 && useRgb.length > 1)
+        validationSplit = 1 / useRgb.length;
 
       const bar = document.getElementById("trainBar");
       const prog = document.getElementById("trainProgress");
@@ -467,13 +604,28 @@ function updateChart() {
       if (status) status.innerText = "";
 
       setTrainingUI(true, "Training… (epoch 1)");
+      setTrainButtonText(`Training… (epoch 1)`);
+
+      let lastEpochStart = now();
+      let lastDice = 0, lastValDice = 0;
 
       await model.fit(x, y, {
         epochs, batchSize, shuffle: true, validationSplit,
         callbacks: {
+          onEpochBegin: async () => { lastEpochStart = now(); },
           onEpochEnd: async (epoch, logs) => {
+            const eMs = now() - lastEpochStart;
+            epochTimes.push(eMs);
+
+            // UI timing updates
+            setCell("t_epochs", epochTimes.map(ms => (ms/60000).toFixed(2)).join(", "));
+            const partialTotal = epochTimes.reduce((a,b)=>a+b, 0);
+            setCell("t_total", fmtMin(partialTotal));
+
+            // metrics + chart
             const d  = logs.diceCoef ?? logs.dice ?? logs["dice_coef"] ?? 0;
             const vd = logs.val_diceCoef ?? logs.val_dice ?? logs["val_dice_coef"] ?? 0;
+            lastDice = d; lastValDice = vd;
 
             history.loss.push(logs.loss);
             history.dice.push(d);
@@ -486,34 +638,71 @@ function updateChart() {
             if (prog) {
               prog.innerText =
                 `Epoch ${epoch + 1}: loss=${logs.loss.toFixed(4)}, dice=${d.toFixed(4)} | ` +
-                `val_loss=${(logs.val_loss ?? 0).toFixed(4)}, val_dice=${vd.toFixed(4)}`;
+                `val_loss=${(logs.val_loss ?? 0).toFixed(4)}, val_dice=${vd.toFixed(4)} | ` +
+                `time=${(eMs/60000).toFixed(2)} min`;
             }
-
             setTrainButtonText(`Training… (epoch ${Math.min(epoch + 2, epochs)})`);
             await tf.nextFrame();
           },
         },
       });
 
+      // ===== TRUE END OF TRAINING =====
+      const tTotal = now() - tGlobal0;
+      setCell("t_total", fmtMin(tTotal));
+
+      // memory snapshot
+      const mem = tf.memory?.() || {};
+      setCell("t_mem", `tensors=${mem.numTensors ?? "?"}, bytes=${mem.numBytes ?? "?"}`);
+
       setTrainingUI(true, "Saving model…");
       if (status) status.innerText = "✅ Training finished.";
       showToast("Training finished!", "success");
 
+      // optional save prompts
       if (window.confirm("Save the trained model in this browser for quick reuse?")) {
-        if (typeof setTrainButtonText === "function") setTrainButtonText("Saving to browser…");
+        setTrainButtonText("Saving to browser…");
         await model.save("indexeddb://unet-model");
         showToast("Saved in browser storage.", "success");
       }
-
       if (window.confirm("Download the model files now?")) {
-        if (typeof setTrainButtonText === "function") setTrainButtonText("Preparing download…");
+        setTrainButtonText("Preparing download…");
         await model.save("downloads://unet-model");
         showToast("Download started.", "success");
       }
 
+      // cleanup tensors
       x.dispose(); y.dispose();
       inputImages.forEach(t => t.dispose());
       inputMasks.forEach(t => t.dispose());
+
+      // console summaries (copy into appendix)
+      console.table([
+        { metric: "Backend", value: tf.getBackend?.() },
+        { metric: "Backend set (ms)", value: tBackendSet.toFixed(1) },
+        { metric: "Preprocess (ms)", value: tPre.toFixed(1) },
+        { metric: "Build+Compile (ms)", value: tCompile.toFixed(1) },
+        { metric: "Stack (ms)", value: tStack.toFixed(1) },
+        { metric: "Total training (ms)", value: tTotal.toFixed(1) },
+        { metric: "Tensors after", value: mem.numTensors ?? "?" },
+        { metric: "Bytes after", value: mem.numBytes ?? "?" },
+      ]);
+      console.table(epochTimes.map((ms, i) => ({ epoch: i + 1, minutes: (ms / 60000).toFixed(3) })));
+
+      // append a CSV-ready row if the optional bench table is present
+      appendBenchRow({
+        backend: tf.getBackend?.(),
+        N: useRgb.length,
+        T_backendSet_ms: tBackendSet,
+        T_preproc_ms: tPre,
+        T_stack_ms: tStack,
+        T_compile_ms: tCompile,
+        T_total_ms: tTotal,
+        epoch_minutes: epochTimes.map(ms => (ms/60000).toFixed(2)).join("|"),
+        dice_last: history.dice[history.dice.length - 1] ?? lastDice ?? 0,
+        val_dice_last: history.val_dice[history.val_dice.length - 1] ?? lastValDice ?? 0,
+        notes: ""
+      });
 
     } catch (err) {
       console.error(err);
@@ -985,4 +1174,22 @@ window.addEventListener("load", async () => {
 
   // bind right-side GT + Accuracy UI
   bindGTPanel();
+
+  // Backend selector wiring
+  const bsel = document.getElementById("backendSelect");
+  const bstatus = document.getElementById("backendStatus");
+  if (bsel) {
+    bstatus && (bstatus.textContent = `Backend: ${tf.getBackend?.() || "unknown"}`);
+    bsel.value = tf.getBackend?.() || "webgl";
+    bsel.addEventListener("change", setBackendFromSelect);
+  }
+
+  // Initialize timing table cells once on load
+  setCell("t_backend", "—");
+  setCell("t_pre", "—");
+  setCell("t_stack", "—");
+  setCell("t_compile", "—");
+  setCell("t_epochs", "—");
+  setCell("t_total", "—");
+  setCell("t_mem", "—");
 });

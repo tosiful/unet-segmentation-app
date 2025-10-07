@@ -1,81 +1,140 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>U-Net Image Segmentation</title>
-  <meta name="viewport" content="width=600, initial-scale=1">
-  <link rel="stylesheet" href="style.css">
-  <!-- TensorFlow.js -->
+  <meta name="viewport" content="width=600, initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- TFJS core (no defer) -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <!-- WASM backend plugin (no defer) -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.20.0/dist/tfjs-backend-wasm.min.js"></script>
+
+ <!-- Optional -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
+
+<!-- Your script for setting WASM paths -->
+<script src="setWasmPaths.js" defer></script>
+
+  <!-- Point to the .wasm files -->
   <script>
-    if (tf?.wasm?.setWasmPaths) {
+    // Now tf.wasm and setWasmPaths should be available
+    if (window.tf?.wasm?.setWasmPaths) {
       tf.wasm.setWasmPaths("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@4.20.0/dist/");
+    } else {
+      // This warning should no longer appear
+      console.warn("WASM setWasmPaths not found — plugin may not have loaded yet.");
     }
   </script>
+
+  <!-- Your app LAST -->
+  <script src="app.js" defer></script>
 </head>
+
+
+
 <body>
   <h1>🧠 U-Net Image Segmentation</h1>
 
   <div id="toast"></div>
 
+  <!-- ==================== 1. Upload Training Data ==================== -->
   <section>
     <h2>1. Upload Training Data</h2>
-    <!-- Folder Selection and Copying -->
-    <div>
+
+    <!-- Folder Selection and Auto-Pair -->
+    <div class="row" style="gap:12px; flex-wrap:wrap;">
       <label for="sourceFolderInput"><b>Select Source Folder:</b></label>
-      <input type="file" id="sourceFolderInput" webkitdirectory directory>
+      <input type="file" id="sourceFolderInput" webkitdirectory directory />
       <p id="sourceFolderPath">No folder selected</p>
 
-      <label for="numImagesInput"><b>Number of Image-Mask Pairs to Copy:</b></label>
-      <input type="number" id="numImagesInput" min="1" placeholder="Enter number of pairs">
+      <label for="numImagesInput"><b>Number of Image–Mask Pairs to Use (0 = all):</b></label>
+      <input type="number" id="numImagesInput" min="0" value="0" placeholder="0 (all)" />
 
-      <button id="copyFilesBtn">Copy Image-Mask Pairs</button>
+      <button id="copyFilesBtn">Copy Image–Mask Pairs</button>
     </div>
 
     <div class="drop-container">
       <div id="imageDrop" class="drop-zone">
         <span>Drop RGB images here or click to select</span>
-        <input type="file" id="inputImage" multiple style="display:none" accept="image/*">
+        <input type="file" id="inputImage" multiple accept="image/*" style="display:none" />
         <div id="imageCount">0 RGB images loaded</div>
         <div id="imagePreview" class="preview-list"></div>
       </div>
+
       <div id="maskDrop" class="drop-zone">
         <span>Drop Mask images here or click to select</span>
-        <input type="file" id="inputMask" multiple style="display:none" accept="image/*">
+        <input type="file" id="inputMask" multiple accept="image/*" style="display:none" />
         <div id="maskCount">0 Mask images loaded</div>
         <div id="maskPreview" class="preview-list"></div>
       </div>
     </div>
   </section>
 
+  <!-- ==================== 2. Train Model ==================== -->
   <section>
     <h2>2. Train Model</h2>
-    <label for="modelSelect"><b>Model Architecture:</b></label>
-    <select id="modelSelect">
-      <option value="shallow">Shallow U-Net (fast, simple)</option>
-      <option value="deep">Deep U-Net (BatchNorm, more layers)</option>
-    </select>
 
-    <label class="inline">
-      Epochs
-      <input type="number" id="epochsInput" value="10" min="1" step="1">
-    </label>
-    <label class="inline">
-      Batch size
-      <input type="number" id="batchSizeInput" value="4" min="1" step="1">
-    </label>
+    <div class="row" style="gap:12px; align-items:center; flex-wrap:wrap;">
+      <label class="inline" for="modelSelect"><b>Model Architecture:</b></label>
+      <select id="modelSelect">
+        <option value="shallow">Shallow U-Net (fast, simple)</option>
+        <option value="deep">Deep U-Net (BatchNorm, more layers)</option>
+      </select>
 
-    <button id="trainBtn">Train U-Net</button>
-    <progress id="trainBar" value="0" max="10"></progress>
-    <span id="trainSpinner" aria-hidden="true"></span>
+     
 
-    <span id="trainProgress"></span>
-    <div id="trainStatus"></div>
+      <label class="inline">
+        Epochs
+        <input type="number" id="epochsInput" value="10" min="1" step="1" />
+      </label>
+      <label class="inline">
+        Batch size
+        <input type="number" id="batchSizeInput" value="4" min="1" step="1" />
+      </label>
+    </div>
+
+    <!-- Backend + timing UI (IDs used in app.js) -->
+    <div style="margin:8px 0; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+      <label class="inline">
+        Backend
+        <select id="backendSelect">
+          <option value="webgl">webgl (GPU in browser)</option>
+          <option value="wasm">wasm (WebAssembly)</option>
+          <option value="cpu">cpu</option>
+        </select>
+      </label>
+      <span id="backendStatus" class="muted">Backend: (detecting…)</span>
+      <button id="exportCsvBtn" class="secondary" title="Export benchmark rows">Export CSV</button>
+    </div>
+
+    <h3 style="margin-top:10px;">Timing & Backend</h3>
+    <table id="timingTable" style="width:100%; border-collapse:collapse; font-size:.95em;">
+      <tbody>
+        <tr><td style="padding:6px;border-bottom:1px solid #eee;">Backend set</td><td id="t_backend" style="padding:6px;border-bottom:1px solid #eee;">—</td></tr>
+        <tr><td style="padding:6px;border-bottom:1px solid #eee;">Model build+compile</td><td id="t_compile" style="padding:6px;border-bottom:1px solid #eee;">—</td></tr>
+        <tr><td style="padding:6px;border-bottom:1px solid #eee;">Preprocess (images + masks)</td><td id="t_pre" style="padding:6px;border-bottom:1px solid #eee;">—</td></tr>
+        <tr><td style="padding:6px;border-bottom:1px solid #eee;">Stack tensors (x,y)</td><td id="t_stack" style="padding:6px;border-bottom:1px solid #eee;">—</td></tr>
+        <tr><td style="padding:6px;border-bottom:1px solid #eee;">Epoch times (min)</td><td id="t_epochs" style="padding:6px;border-bottom:1px solid #eee;">—</td></tr>
+        <tr><td style="padding:6px;border-bottom:1px solid #eee;">Total training (min)</td><td id="t_total" style="padding:6px;border-bottom:1px solid #eee;">—</td></tr>
+        <tr><td style="padding:6px;">Memory (after train)</td><td id="t_mem" style="padding:6px;">—</td></tr>
+      </tbody>
+    </table>
+
+   
+
+    <div class="row" style="gap:12px; align-items:center; flex-wrap:wrap; margin-top:8px;">
+      <button id="trainBtn">Train U-Net</button>
+      <progress id="trainBar" value="0" max="10"></progress>
+      <span id="trainSpinner" aria-hidden="true"></span>
+      <span id="trainProgress"></span>
+      <div id="trainStatus" class="muted"></div>
+    </div>
+
     <canvas id="trainingChart" width="400" height="200"></canvas>
 
-    <!-- Legend for clarity (matches dataset colors in app.js) -->
+    <!-- Legend (optional; CSS colors in style.css) -->
     <div class="chart-legend" aria-label="Training chart legend">
       <span class="legend-item"><span class="legend-dot loss"></span> Loss</span>
       <span class="legend-item"><span class="legend-dot dice"></span> Dice</span>
@@ -85,34 +144,33 @@
 
     <div class="model-actions">
       <button id="downloadModelBtn">Download Model</button>
-      <input type="file" id="uploadModelInput" accept=".json,.bin" multiple style="display:none">
+      <input type="file" id="uploadModelInput" accept=".json,.bin" multiple style="display:none" />
       <button onclick="document.getElementById('uploadModelInput').click()">Upload Model</button>
       <button id="clearModelBtn">Clear Model from Browser</button>
     </div>
   </section>
 
+  <!-- ==================== 3. Predict ==================== -->
   <section>
     <h2>3. Predict</h2>
-    <div style="display: flex; gap: 32px; flex-wrap: wrap;">
+
+    <div style="display:flex; gap:32px; flex-wrap:wrap;">
       <!-- Predict on Image -->
       <div>
         <div id="predictDrop" class="drop-zone" style="width:220px;">
           <span>Click to select image for prediction</span>
-          <input type="file" id="predictImage" accept="image/*" style="display:none">
+          <input type="file" id="predictImage" accept="image/*" style="display:none" />
           <div id="predictCount">No image uploaded</div>
           <div id="predictPreview" class="preview-list"></div>
         </div>
 
         <div>
           <label class="thresholdSlider">Threshold</label>
-          <!-- id from thresholdSlider -> thresholdInput -->
-          <input type="number" id="thresholdInput" min="0" max="1" step="0.01" value="0.5" style="width:150px;">
+          <input type="number" id="thresholdInput" min="0" max="1" step="0.01" value="0.5" style="width:150px;" />
         </div>
 
         <button id="predictBtn">Predict Mask</button>
-        <!-- White background so it’s visible before drawing -->
-        <canvas id="resultCanvas" width="256" height="256"
-                style="border:1px solid #ccc; margin-top:10px; background:#fff;"></canvas>
+        <canvas id="resultCanvas" width="256" height="256" style="border:1px solid #ccc; margin-top:10px; background:#fff;"></canvas>
       </div>
 
       <!-- RIGHT: Prediction Accuracy panel -->
@@ -128,32 +186,30 @@
           <span id="scoreText" class="muted"></span>
         </div>
 
-        <!-- White background for GT preview too -->
-        <canvas id="gtCanvas" class="canvas-box" width="512" height="512"
-                style="background:#fff;"></canvas>
+        <canvas id="gtCanvas" class="canvas-box" width="512" height="512" style="background:#fff;"></canvas>
       </div>
 
-      <!-- Predict on Mask  -->
+      <!-- Optional: Mask preview panel (kept from your original) -->
       <div>
         <div id="maskPredictDrop" class="drop-zone" style="width:220px;">
           <span>Click to select mask image</span>
-          <input type="file" id="maskPredictImage" accept="image/*" style="display:none">
+          <input type="file" id="maskPredictImage" accept="image/*" style="display:none" />
           <div id="maskPredictCount">No mask uploaded</div>
           <div id="maskPredictPreview" class="preview-list"></div>
         </div>
         <button id="showMaskBtn">Show Mask</button>
-        <canvas id="maskResultCanvas" width="256" height="256"
-                style="border:1px solid #ccc; margin-top:20px; background:#fff;"></canvas>
+        <canvas id="maskResultCanvas" width="256" height="256" style="border:1px solid #ccc; margin-top:20px; background:#fff;"></canvas>
       </div>
     </div>
 
+    <!-- ==================== Video Segmentation ==================== -->
     <section id="videoSection">
       <h3>Video Segmentation</h3>
 
       <div class="row">
         <label class="inline">
           Video file
-          <input type="file" id="videoFile" accept="video/*">
+          <input type="file" id="videoFile" accept="video/*" />
         </label>
 
         <label class="inline">
@@ -166,12 +222,12 @@
 
         <label class="inline">
           Target FPS
-          <input type="number" id="videoFps" value="15" min="1" max="60" step="1">
+          <input type="number" id="videoFps" value="15" min="1" max="60" step="1" />
         </label>
 
         <label class="inline">
           Frame stride
-          <input type="number" id="frameStride" value="1" min="1" step="1">
+          <input type="number" id="frameStride" value="1" min="1" step="1" />
         </label>
 
         <button id="startVideoBtn" class="primary">Segment Video</button>
@@ -188,8 +244,7 @@
       </div>
 
       <div class="row">
-        <canvas id="videoCanvas" width="640" height="360"
-                style="max-width:100%; border:1px solid #ddd; background:#fff;"></canvas>
+        <canvas id="videoCanvas" width="640" height="360" style="max-width:100%; border:1px solid #ddd; background:#fff;"></canvas>
       </div>
 
       <div class="row">
@@ -198,18 +253,7 @@
     </section>
   </section>
 
-  <!-- Local, offline libs  -->
-  <script src="libs/tf.min.js" defer></script>
-  <script src="libs/tfjs-backend-wasm.min.js" defer></script>
-  <script>
-    // Point TFJS to the local wasm files
-    if (window.tf?.wasm?.setWasmPaths) {
-      tf.wasm.setWasmPaths("libs/");
-    }
-  </script>
-  <script src="libs/chart.umd.min.js" defer></script>
 
-  <script src="app.js" defer></script>
 
   <!-- Training overlay -->
   <div id="trainerOverlay" role="alert" aria-live="polite" style="display:none;position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;background:rgba(255,255,255,.75);backdrop-filter:blur(2px);">
