@@ -84,7 +84,8 @@ No installation is required — everything runs **directly in the browser**.
 
 ## 📝 License
 
-This project is released under the **MIT License**.
+This project is licensed under the [MIT License](./LICENSE).
+.
 
 ---
 
