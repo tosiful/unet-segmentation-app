@@ -28,8 +28,7 @@
     }
   </script>
 
-  <!-- Your app LAST -->
-  <script src="app.js" defer></script>
+
 </head>
 
 
@@ -253,7 +252,18 @@
     </section>
   </section>
 
+<!-- Local, offline libs  -->
+  <script src="libs/tf.min.js" defer></script>
+  <script src="libs/tfjs-backend-wasm.min.js" defer></script>
+  <script>
+    // Point TFJS to the local wasm files
+    if (window.tf?.wasm?.setWasmPaths) {
+      tf.wasm.setWasmPaths("./libs/");
+    }
+  </script>
+  <script src="libs/chart.umd.min.js" defer></script>
 
+  <script src="app.js" defer></script>
 
   <!-- Training overlay -->
   <div id="trainerOverlay" role="alert" aria-live="polite" style="display:none;position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;background:rgba(255,255,255,.75);backdrop-filter:blur(2px);">
