@@ -172,16 +172,16 @@
         <canvas id="resultCanvas" width="256" height="256" style="border:1px solid #ccc; margin-top:10px; background:#fff;"></canvas>
       </div>
 
-      <!-- RIGHT: Prediction Accuracy panel -->
+      <!-- RIGHT: Evaluation panel -->
       <div class="predict-right">
         <div id="gtDrop" class="drop-zone">
           <input id="gtMaskInput" type="file" accept=".png,.jpg,.jpeg,.bmp,.webp" hidden />
-          <strong>Upload a mask to compute Accuracy</strong>
+          <strong>Upload a ground-truth mask to evaluate (Dice, IoU, Precision, Recall, Accuracy)</strong>
           <div id="gtStatus" class="muted">Click to select or drop a file</div>
         </div>
 
         <div style="margin:10px 0; display:flex; gap:8px; align-items:center;">
-          <button id="scoreBtn" class="btn">Prediction Accuracy</button>
+          <button id="scoreBtn" class="btn">Evaluate Prediction</button>
           <span id="scoreText" class="muted"></span>
         </div>
 
