@@ -858,7 +858,7 @@ async function computePredictionAndScores() {
         scoreEl.textContent =
           `Dice: ${dice.toFixed(3)} | IoU: ${iou.toFixed(3)} | ` +
           `Precision: ${prec.toFixed(3)} | Recall: ${rec.toFixed(3)} | ` +
-          `Accuracy: ${acc.toFixed(3)}`;
+          `Accuracy: ${acc.toFixed(3)} (pixel accuracy; inflated by background — rely on Dice/IoU)`;
       }
       if (gtStatus) gtStatus.textContent = gtFile.name;
       gt.dispose();
